@@ -1,0 +1,1966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#071827" />
+  <meta name="description" content="Naval Duel — a private, real-time two-player browser strategy game." />
+  <title>Naval Duel — Remote Two-Player Battle</title>
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #04111c;
+      --panel: rgba(9, 31, 49, 0.88);
+      --panel-2: rgba(13, 43, 66, 0.82);
+      --line: rgba(130, 202, 255, 0.18);
+      --text: #eef8ff;
+      --muted: #9db7c8;
+      --accent: #43d3ff;
+      --accent-2: #ffbf47;
+      --danger: #ff5f65;
+      --success: #5fe0a2;
+      --water-1: #0b3a5b;
+      --water-2: #0a304c;
+      --ship: #a9c1d1;
+      --ship-dark: #6f899b;
+      --miss: #d8f4ff;
+      --shadow: 0 22px 70px rgba(0, 0, 0, 0.38);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 16% 10%, rgba(36, 158, 208, 0.2), transparent 30%),
+        radial-gradient(circle at 88% 14%, rgba(255, 176, 57, 0.1), transparent 24%),
+        linear-gradient(180deg, #071b2b 0%, var(--bg) 55%, #020a11 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.16;
+      background-image:
+        linear-gradient(rgba(255,255,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, black, transparent 90%);
+    }
+
+    button, input { font: inherit; }
+
+    button {
+      border: 0;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible, input:focus-visible {
+      outline: 3px solid rgba(67, 211, 255, 0.45);
+      outline-offset: 2px;
+    }
+
+    button:disabled { cursor: not-allowed; opacity: 0.48; }
+
+    .app {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 18px clamp(14px, 3vw, 38px) 36px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 58px;
+      margin-bottom: 18px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 900;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .brand-mark {
+      width: 40px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #55ddff, #167ba8);
+      color: #03111a;
+      box-shadow: 0 10px 28px rgba(67, 211, 255, .25);
+      font-size: 22px;
+    }
+
+    .brand small {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      margin-top: 2px;
+    }
+
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+
+    .icon-btn, .ghost-btn, .primary-btn, .danger-btn {
+      border-radius: 13px;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+
+    .icon-btn:hover, .ghost-btn:hover, .primary-btn:hover, .danger-btn:hover { transform: translateY(-1px); }
+
+    .icon-btn {
+      width: 42px;
+      height: 42px;
+      background: rgba(255,255,255,.07);
+      color: var(--text);
+      border: 1px solid var(--line);
+      font-size: 18px;
+    }
+
+    .connection-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      background: rgba(4, 17, 28, .65);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .connection-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #758390;
+      box-shadow: 0 0 0 4px rgba(117, 131, 144, .12);
+    }
+
+    .connection-pill.connected .connection-dot {
+      background: var(--success);
+      box-shadow: 0 0 0 4px rgba(95, 224, 162, .12), 0 0 16px rgba(95, 224, 162, .5);
+    }
+
+    .panel {
+      background: linear-gradient(180deg, rgba(14, 45, 68, .92), rgba(5, 22, 35, .92));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .screen { display: none; }
+    .screen.active { display: block; animation: rise .3s ease both; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .lobby-shell {
+      display: grid;
+      grid-template-columns: 1.08fr .92fr;
+      gap: 22px;
+      min-height: calc(100vh - 135px);
+    }
+
+    .hero {
+      padding: clamp(28px, 5vw, 68px);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .hero::after {
+      content: "⚓";
+      position: absolute;
+      right: -34px;
+      bottom: -62px;
+      font-size: clamp(190px, 30vw, 390px);
+      color: rgba(117, 212, 255, .06);
+      transform: rotate(-12deg);
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      margin-bottom: 16px;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      font-size: clamp(44px, 7vw, 92px);
+      line-height: .9;
+      letter-spacing: -.06em;
+      margin-bottom: 24px;
+      max-width: 780px;
+    }
+
+    .hero-copy {
+      max-width: 660px;
+      font-size: clamp(16px, 2vw, 21px);
+      line-height: 1.55;
+      color: #c4d8e5;
+      margin-bottom: 28px;
+    }
+
+    .feature-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .feature-chip {
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.08);
+      color: #cde4f2;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .lobby-card {
+      padding: clamp(24px, 4vw, 42px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .lobby-card h2 { font-size: 28px; margin-bottom: 8px; }
+    .subtle { color: var(--muted); line-height: 1.55; }
+
+    .field { margin: 18px 0 0; }
+    .field label {
+      display: block;
+      color: #bcd2df;
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin-bottom: 8px;
+    }
+
+    .text-input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(2, 13, 22, .6);
+      color: var(--text);
+      padding: 14px 15px;
+      min-height: 50px;
+    }
+
+    .text-input::placeholder { color: #668093; }
+
+    .lobby-actions { display: grid; grid-template-columns: 1fr; gap: 11px; margin-top: 22px; }
+
+    .primary-btn, .ghost-btn, .danger-btn {
+      min-height: 48px;
+      padding: 12px 18px;
+      font-weight: 900;
+      letter-spacing: .02em;
+    }
+
+    .primary-btn {
+      background: linear-gradient(135deg, var(--accent), #1d94c7);
+      color: #02111a;
+      box-shadow: 0 11px 30px rgba(67, 211, 255, .18);
+    }
+
+    .ghost-btn {
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+
+    .danger-btn { background: rgba(255, 95, 101, .12); border: 1px solid rgba(255,95,101,.25); color: #ffbec1; }
+
+    .join-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+      color: #668093;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+    .divider::before, .divider::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+
+    details.rules {
+      margin-top: 24px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    details.rules summary { cursor: pointer; color: #d7e8f2; font-weight: 800; }
+
+    .game-header {
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .room-box { display: flex; align-items: center; gap: 10px; }
+    .room-code {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: .18em;
+      font-size: 19px;
+      font-weight: 950;
+      color: var(--accent-2);
+    }
+
+    .status-center { text-align: center; min-width: 0; }
+    .status-title { font-weight: 950; font-size: 18px; margin-bottom: 3px; }
+    .status-detail { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .player-strip { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+    .player-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, #284f6a, #153247);
+      border: 1px solid rgba(255,255,255,.13);
+      font-weight: 950;
+    }
+    .player-names { text-align: right; font-size: 12px; }
+    .player-names strong { display: block; font-size: 13px; }
+    .player-names span { color: var(--muted); }
+
+    .placement-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .board-panel { padding: clamp(14px, 2.4vw, 26px); }
+    .board-panel-title { display: flex; justify-content: space-between; gap: 12px; align-items: end; margin-bottom: 14px; }
+    .board-panel-title h2 { margin: 0; font-size: 22px; }
+    .board-panel-title p { margin: 0; color: var(--muted); font-size: 12px; }
+
+    .board-scroll { overflow: auto; padding: 3px; }
+
+    .board-frame {
+      --cell: clamp(27px, 5.35vw, 54px);
+      display: grid;
+      grid-template-columns: 24px repeat(10, var(--cell));
+      grid-template-rows: 24px repeat(10, var(--cell));
+      width: max-content;
+      margin: 0 auto;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .axis-label {
+      display: grid;
+      place-items: center;
+      color: #7896aa;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .cell {
+      position: relative;
+      width: var(--cell);
+      height: var(--cell);
+      border: 1px solid rgba(120, 200, 245, .15);
+      background: linear-gradient(145deg, var(--water-1), var(--water-2));
+      color: inherit;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .cell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 30% 20%, rgba(255,255,255,.08), transparent 34%);
+      opacity: .7;
+    }
+
+    .cell:hover:not(:disabled) { z-index: 2; box-shadow: inset 0 0 0 2px rgba(67,211,255,.55); }
+    .cell.preview-ok { background: linear-gradient(145deg, rgba(95,224,162,.65), rgba(25,105,79,.85)); }
+    .cell.preview-bad { background: linear-gradient(145deg, rgba(255,95,101,.65), rgba(117,33,42,.9)); }
+    .cell.ship { background: linear-gradient(145deg, var(--ship), var(--ship-dark)); box-shadow: inset 0 0 0 2px rgba(236,249,255,.16); }
+    .cell.ship::after {
+      content: "";
+      position: absolute;
+      inset: 24%;
+      border-radius: 50%;
+      border: 2px solid rgba(20, 42, 57, .45);
+    }
+
+    .cell.miss::after, .cell.hit::after {
+      content: "";
+      position: absolute;
+      width: 30%;
+      aspect-ratio: 1;
+      left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      z-index: 2;
+    }
+
+    .cell.miss::after { background: var(--miss); box-shadow: 0 0 14px rgba(216,244,255,.8); }
+    .cell.hit::after {
+      width: 52%;
+      background: var(--danger);
+      box-shadow: 0 0 0 5px rgba(255,95,101,.13), 0 0 22px rgba(255,95,101,.65);
+      clip-path: polygon(48% 0, 60% 32%, 87% 13%, 75% 42%, 100% 50%, 70% 59%, 87% 87%, 59% 72%, 50% 100%, 41% 71%, 13% 87%, 29% 59%, 0 50%, 30% 42%, 13% 13%, 40% 32%);
+      border-radius: 0;
+    }
+
+    .cell.sunk { background: linear-gradient(145deg, #592e35, #351b22); }
+    .cell.targetable { cursor: crosshair; }
+    .cell.pending::after {
+      content: "";
+      position: absolute;
+      inset: 28%;
+      border: 3px solid var(--accent-2);
+      border-radius: 50%;
+      animation: pulse 1s infinite ease-in-out;
+    }
+
+    @keyframes pulse { 50% { transform: scale(.72); opacity: .5; } }
+
+    .control-panel { padding: 20px; position: sticky; top: 14px; }
+    .control-panel h3 { font-size: 17px; margin-bottom: 14px; }
+
+    .ship-list { display: grid; gap: 9px; }
+    .ship-card {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      text-align: left;
+      padding: 12px;
+      background: rgba(255,255,255,.045);
+      color: var(--text);
+      border: 1px solid transparent;
+      border-radius: 13px;
+    }
+    .ship-card:hover { background: rgba(255,255,255,.075); }
+    .ship-card.selected { border-color: var(--accent); background: rgba(67,211,255,.1); }
+    .ship-card.placed { opacity: .68; }
+    .ship-name { font-weight: 850; font-size: 13px; }
+    .ship-length { color: var(--muted); font-size: 11px; margin-top: 3px; }
+    .ship-blocks { display: flex; gap: 3px; }
+    .ship-blocks i { width: 11px; height: 7px; border-radius: 3px; background: var(--ship); display: block; }
+    .ship-card.placed .ship-blocks i { background: var(--success); }
+
+    .tool-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 14px; }
+    .ready-wrap { margin-top: 14px; }
+    .ready-wrap .primary-btn, .ready-wrap .ghost-btn { width: 100%; }
+    .lock-note { color: var(--muted); font-size: 11px; line-height: 1.45; margin: 10px 2px 0; }
+
+    .battle-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 310px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .battle-board .board-frame { --cell: clamp(22px, 3.1vw, 42px); }
+    .battle-board.enemy-turn { box-shadow: inset 0 0 0 2px rgba(67,211,255,.16), var(--shadow); }
+
+    .side-panel { padding: 18px; position: sticky; top: 14px; }
+    .turn-card {
+      padding: 16px;
+      border-radius: 16px;
+      background: linear-gradient(145deg, rgba(67,211,255,.12), rgba(255,255,255,.035));
+      border: 1px solid var(--line);
+      margin-bottom: 14px;
+    }
+    .turn-label { color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+    .turn-value { font-size: 22px; font-weight: 950; margin-top: 4px; }
+
+    .fleet-status { display: grid; gap: 8px; margin-bottom: 16px; }
+    .fleet-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; font-size: 12px; }
+    .fleet-row span:last-child { color: var(--success); font-weight: 900; }
+    .fleet-row.sunk { color: #758b99; text-decoration: line-through; }
+    .fleet-row.sunk span:last-child { color: var(--danger); text-decoration: none; }
+
+    .chat {
+      border-top: 1px solid var(--line);
+      padding-top: 14px;
+    }
+    .chat h3 { font-size: 14px; margin-bottom: 10px; }
+    .chat-log {
+      height: 170px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+      margin-bottom: 10px;
+    }
+    .chat-message {
+      max-width: 88%;
+      align-self: flex-start;
+      padding: 8px 10px;
+      border-radius: 12px 12px 12px 3px;
+      background: rgba(255,255,255,.07);
+      color: #d8e7ef;
+      font-size: 12px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .chat-message.mine { align-self: flex-end; border-radius: 12px 12px 3px 12px; background: rgba(67,211,255,.14); }
+    .chat-message.system { align-self: center; background: transparent; color: #70899a; font-size: 10px; text-align: center; }
+    .chat-row { display: grid; grid-template-columns: 1fr auto; gap: 7px; }
+    .chat-row .text-input { min-height: 40px; padding: 9px 11px; font-size: 12px; }
+    .chat-row button { width: 42px; border-radius: 12px; background: var(--accent); color: #03131d; font-weight: 950; }
+
+    .end-layout { min-height: calc(100vh - 175px); display: grid; place-items: center; }
+    .end-card { width: min(620px, 100%); text-align: center; padding: clamp(28px, 6vw, 62px); position: relative; overflow: hidden; }
+    .result-icon { font-size: 72px; margin-bottom: 12px; }
+    .end-card h2 { font-size: clamp(38px, 7vw, 70px); letter-spacing: -.04em; margin-bottom: 12px; }
+    .end-card p { color: var(--muted); font-size: 16px; line-height: 1.55; }
+    .verification {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 12px auto 20px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+    }
+    .verification.good { color: var(--success); border-color: rgba(95,224,162,.3); }
+    .verification.bad { color: var(--danger); border-color: rgba(255,95,101,.3); }
+    .end-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+    .toast-stack {
+      position: fixed;
+      z-index: 100;
+      right: 16px;
+      bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      width: min(360px, calc(100vw - 32px));
+    }
+    .toast {
+      padding: 13px 15px;
+      border-radius: 14px;
+      background: rgba(6, 24, 38, .96);
+      border: 1px solid var(--line);
+      box-shadow: 0 14px 45px rgba(0,0,0,.35);
+      color: #d9e9f2;
+      font-size: 13px;
+      animation: slideIn .22s ease both;
+    }
+    .toast.error { border-color: rgba(255,95,101,.35); color: #ffc4c7; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      display: none;
+      place-items: center;
+      padding: 20px;
+      background: rgba(0, 7, 12, .75);
+      backdrop-filter: blur(8px);
+    }
+    .modal-backdrop.open { display: grid; }
+    .modal { width: min(520px, 100%); padding: 24px; }
+    .modal h2 { margin-bottom: 10px; }
+    .modal p, .modal li { color: var(--muted); line-height: 1.55; font-size: 14px; }
+    .modal-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 1120px) {
+      .battle-layout { grid-template-columns: 1fr 1fr; }
+      .side-panel { grid-column: 1 / -1; position: static; display: grid; grid-template-columns: 220px 1fr; gap: 18px; }
+      .chat { border-top: 0; border-left: 1px solid var(--line); padding-top: 0; padding-left: 18px; }
+    }
+
+    @media (max-width: 860px) {
+      .lobby-shell, .placement-layout { grid-template-columns: 1fr; }
+      .lobby-shell { min-height: auto; }
+      .hero { min-height: 420px; }
+      .control-panel { position: static; }
+      .game-header { grid-template-columns: 1fr auto; }
+      .status-center { grid-column: 1 / -1; grid-row: 2; text-align: left; }
+      .player-strip { grid-column: 2; grid-row: 1; }
+      .battle-layout { grid-template-columns: 1fr; }
+      .side-panel { grid-column: auto; grid-template-columns: 1fr; }
+      .chat { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; padding-top: 14px; }
+      .battle-board .board-frame { --cell: clamp(26px, 7.5vw, 48px); }
+    }
+
+    @media (max-width: 540px) {
+      .app { padding: 10px 9px 28px; }
+      .topbar { margin-bottom: 10px; }
+      .brand span:last-child { font-size: 13px; }
+      .connection-pill span:last-child { display: none; }
+      .hero { padding: 30px 22px; min-height: 360px; }
+      .lobby-card { padding: 23px 18px; }
+      .join-row { grid-template-columns: 1fr; }
+      .game-header { padding: 14px; }
+      .player-names { display: none; }
+      .room-code { font-size: 16px; }
+      .board-panel { padding: 12px 6px 16px; }
+      .board-frame { --cell: calc((100vw - 52px) / 10); grid-template-columns: 18px repeat(10, var(--cell)); grid-template-rows: 18px repeat(10, var(--cell)); }
+      .battle-board .board-frame { --cell: calc((100vw - 52px) / 10); }
+      .axis-label { font-size: 8px; }
+      .end-card { border-radius: 18px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">⚓</div>
+        <span>Naval Duel<small>Remote tactical battle</small></span>
+      </div>
+      <div class="top-actions">
+        <div id="connectionPill" class="connection-pill"><span class="connection-dot"></span><span id="connectionText">Offline</span></div>
+        <button id="soundBtn" class="icon-btn" type="button" aria-label="Toggle sound" title="Toggle sound">🔊</button>
+        <button id="helpBtn" class="icon-btn" type="button" aria-label="How to play" title="How to play">?</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="lobbyScreen" class="screen active">
+        <div class="lobby-shell">
+          <div class="panel hero">
+            <div class="eyebrow">Head-to-head browser strategy</div>
+            <h1>Find them.<br />Sink them.</h1>
+            <p class="hero-copy">Place your fleet, invite a friend with a six-character room code, and battle live from separate phones or computers.</p>
+            <div class="feature-row">
+              <span class="feature-chip">2 players</span>
+              <span class="feature-chip">Private boards</span>
+              <span class="feature-chip">No account required</span>
+              <span class="feature-chip">Built-in chat</span>
+            </div>
+          </div>
+
+          <div class="panel lobby-card">
+            <div class="eyebrow">Command center</div>
+            <h2>Start a battle</h2>
+            <p class="subtle">Both players open this game in a modern browser. One creates the room; the other joins it.</p>
+
+            <div class="field">
+              <label for="nameInput">Commander name</label>
+              <input id="nameInput" class="text-input" maxlength="24" autocomplete="nickname" placeholder="Your name" />
+            </div>
+
+            <div class="lobby-actions">
+              <button id="createBtn" class="primary-btn" type="button">Create private room</button>
+            </div>
+
+            <div class="divider">or join a friend</div>
+
+            <div class="join-row">
+              <input id="roomInput" class="text-input" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ROOM CODE" aria-label="Room code" />
+              <button id="joinBtn" class="ghost-btn" type="button">Join room</button>
+            </div>
+
+            <details class="rules">
+              <summary>Connection and privacy notes</summary>
+              <p>Game traffic travels directly between the two browsers after the connection is established. Your full ship layout is not transmitted during the battle. The game uses a public signaling service to help the browsers find each other.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section id="placementScreen" class="screen">
+        <div class="panel game-header">
+          <div class="room-box">
+            <div>
+              <div class="turn-label">Room</div>
+              <div id="roomCodePlacement" class="room-code">------</div>
+            </div>
+            <button id="shareBtnPlacement" class="icon-btn" type="button" title="Share invite">↗</button>
+          </div>
+          <div class="status-center">
+            <div id="placementStatusTitle" class="status-title">Deploy your fleet</div>
+            <div id="placementStatusDetail" class="status-detail">Choose a ship, set its direction, then tap a starting square.</div>
+          </div>
+          <div class="player-strip">
+            <div class="player-names"><strong id="opponentNamePlacement">Opponent</strong><span>connected</span></div>
+            <div id="opponentAvatarPlacement" class="player-avatar">?</div>
+          </div>
+        </div>
+
+        <div class="placement-layout">
+          <div class="panel board-panel">
+            <div class="board-panel-title">
+              <div><h2>Your waters</h2><p>Your fleet remains hidden from your opponent.</p></div>
+            </div>
+            <div class="board-scroll"><div id="placementBoard"></div></div>
+          </div>
+
+          <aside class="panel control-panel">
+            <h3>Fleet manifest</h3>
+            <div id="shipList" class="ship-list"></div>
+            <div class="tool-row">
+              <button id="rotateBtn" class="ghost-btn" type="button">Rotate ↻</button>
+              <button id="randomBtn" class="ghost-btn" type="button">Randomize</button>
+            </div>
+            <div class="tool-row">
+              <button id="clearBtn" class="danger-btn" type="button">Clear</button>
+              <button id="copyCodeBtn" class="ghost-btn" type="button">Copy code</button>
+            </div>
+            <div class="ready-wrap">
+              <button id="readyBtn" class="primary-btn" type="button" disabled>Ready for battle</button>
+            </div>
+            <p class="lock-note">Once both commanders are ready, the first turn is selected automatically and the battle begins.</p>
+          </aside>
+        </div>
+      </section>
+
+      <section id="battleScreen" class="screen">
+        <div class="panel game-header">
+          <div class="room-box">
+            <div>
+              <div class="turn-label">Room</div>
+              <div id="roomCodeBattle" class="room-code">------</div>
+            </div>
+          </div>
+          <div class="status-center">
+            <div id="battleStatusTitle" class="status-title">Battle stations</div>
+            <div id="battleStatusDetail" class="status-detail">Awaiting orders…</div>
+          </div>
+          <div class="player-strip">
+            <div class="player-names"><strong id="opponentNameBattle">Opponent</strong><span>enemy commander</span></div>
+            <div id="opponentAvatarBattle" class="player-avatar">?</div>
+          </div>
+        </div>
+
+        <div class="battle-layout">
+          <div id="enemyBoardPanel" class="panel board-panel battle-board">
+            <div class="board-panel-title">
+              <div><h2>Enemy waters</h2><p>Choose one untested coordinate on your turn.</p></div>
+            </div>
+            <div class="board-scroll"><div id="enemyBoard"></div></div>
+          </div>
+
+          <div class="panel board-panel battle-board">
+            <div class="board-panel-title">
+              <div><h2>Your waters</h2><p>Incoming fire appears here.</p></div>
+            </div>
+            <div class="board-scroll"><div id="ownBattleBoard"></div></div>
+          </div>
+
+          <aside class="panel side-panel">
+            <div>
+              <div class="turn-card">
+                <div class="turn-label">Current order</div>
+                <div id="turnValue" class="turn-value">Stand by</div>
+              </div>
+              <h3>Your fleet</h3>
+              <div id="fleetStatus" class="fleet-status"></div>
+            </div>
+            <div class="chat">
+              <h3>Command channel</h3>
+              <div id="chatLog" class="chat-log" aria-live="polite"></div>
+              <div class="chat-row">
+                <input id="chatInput" class="text-input" maxlength="180" placeholder="Send a message…" aria-label="Chat message" />
+                <button id="chatSendBtn" type="button" aria-label="Send message">➤</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="endScreen" class="screen">
+        <div class="end-layout">
+          <div class="panel end-card">
+            <div id="resultIcon" class="result-icon">🏆</div>
+            <div class="eyebrow">Battle complete</div>
+            <h2 id="resultTitle">Victory</h2>
+            <p id="resultMessage">The enemy fleet has been destroyed.</p>
+            <div id="verificationBadge" class="verification">⏳ Waiting for board verification…</div>
+            <div class="end-actions">
+              <button id="rematchBtn" class="primary-btn" type="button">Request rematch</button>
+              <button id="newRoomBtn" class="ghost-btn" type="button">Leave room</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+  <div id="helpModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="panel modal">
+      <h2 id="helpTitle">How to play</h2>
+      <ol>
+        <li>One player creates a room and shares the six-character code or invite link.</li>
+        <li>Each commander privately places five ships on a 10 × 10 grid.</li>
+        <li>Take turns firing at one coordinate. Red means hit; white means miss.</li>
+        <li>Sink all five enemy ships to win.</li>
+      </ol>
+      <p>A hit does not grant an extra turn. Boards are committed before battle and can be checked when the game ends.</p>
+      <div class="modal-actions"><button id="closeHelpBtn" class="primary-btn" type="button">Got it</button></div>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+
+    const BOARD_SIZE = 10;
+    const PROTOCOL_VERSION = 1;
+    const PEER_PREFIX = "naval-duel-";
+    const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const SHIP_DEFS = [
+      { id: "carrier", name: "Carrier", length: 5 },
+      { id: "battleship", name: "Battleship", length: 4 },
+      { id: "cruiser", name: "Cruiser", length: 3 },
+      { id: "submarine", name: "Submarine", length: 3 },
+      { id: "destroyer", name: "Destroyer", length: 2 }
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const keyOf = (x, y) => `${x},${y}`;
+    const coordName = (x, y) => `${String.fromCharCode(65 + x)}${y + 1}`;
+
+    const state = {
+      peer: null,
+      conn: null,
+      connected: false,
+      isHost: false,
+      roomCode: "",
+      myName: "Commander",
+      opponentName: "Opponent",
+      phase: "lobby",
+      ships: [],
+      selectedShipId: SHIP_DEFS[0].id,
+      orientation: "h",
+      myReady: false,
+      opponentReady: false,
+      commitment: null,
+      opponentCommitment: null,
+      placementNonce: null,
+      myShots: new Map(),
+      incomingShots: new Map(),
+      myTurn: false,
+      pendingShot: null,
+      outcome: null,
+      gameNumber: 1,
+      chat: [],
+      sound: true,
+      myRematch: false,
+      opponentRematch: false,
+      revealSent: false,
+      opponentVerified: null
+    };
+
+    function freshShips() {
+      return SHIP_DEFS.map((ship) => ({ ...ship, cells: [] }));
+    }
+
+    function resetGameState(gameNumber = 1) {
+      state.phase = "placement";
+      state.ships = freshShips();
+      state.selectedShipId = SHIP_DEFS[0].id;
+      state.orientation = "h";
+      state.myReady = false;
+      state.opponentReady = false;
+      state.commitment = null;
+      state.opponentCommitment = null;
+      state.placementNonce = null;
+      state.myShots = new Map();
+      state.incomingShots = new Map();
+      state.myTurn = false;
+      state.pendingShot = null;
+      state.outcome = null;
+      state.gameNumber = gameNumber;
+      state.myRematch = false;
+      state.opponentRematch = false;
+      state.revealSent = false;
+      state.opponentVerified = null;
+      renderAll();
+    }
+
+    function showScreen(name) {
+      ["lobby", "placement", "battle", "end"].forEach((screen) => {
+        $(`${screen}Screen`).classList.toggle("active", screen === name);
+      });
+      state.phase = name;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function setConnectionStatus(text, connected = false) {
+      $("connectionText").textContent = text;
+      $("connectionPill").classList.toggle("connected", connected);
+    }
+
+    function toast(message, type = "info") {
+      const node = document.createElement("div");
+      node.className = `toast ${type === "error" ? "error" : ""}`;
+      node.textContent = message;
+      $("toastStack").appendChild(node);
+      setTimeout(() => node.remove(), 4300);
+    }
+
+    function safeName(value) {
+      const cleaned = String(value || "").trim().replace(/\s+/g, " ").slice(0, 24);
+      return cleaned || "Commander";
+    }
+
+    function initials(name) {
+      return safeName(name).split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+    }
+
+    function generateRoomCode() {
+      const bytes = new Uint8Array(6);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, (byte) => LETTERS[byte % LETTERS.length]).join("");
+    }
+
+    function normalizeRoomCode(value) {
+      return String(value || "").toUpperCase().replace(/[^A-Z2-9]/g, "").replace(/[IO01]/g, "").slice(0, 6);
+    }
+
+    function peerIdForRoom(code) {
+      return `${PEER_PREFIX}${code.toLowerCase()}`;
+    }
+
+    function saveName() {
+      state.myName = safeName($("nameInput").value);
+      $("nameInput").value = state.myName;
+      localStorage.setItem("naval-duel-name", state.myName);
+    }
+
+    function ensurePeerAvailable() {
+      if (typeof Peer === "undefined") {
+        toast("The connection library could not load. Check your internet connection and refresh.", "error");
+        return false;
+      }
+      return true;
+    }
+
+    function destroyPeer() {
+      try { if (state.conn) state.conn.close(); } catch (_) {}
+      try { if (state.peer && !state.peer.destroyed) state.peer.destroy(); } catch (_) {}
+      state.conn = null;
+      state.peer = null;
+      state.connected = false;
+      setConnectionStatus("Offline", false);
+    }
+
+    function createRoom() {
+      if (!ensurePeerAvailable()) return;
+      saveName();
+      destroyPeer();
+      state.isHost = true;
+      state.roomCode = generateRoomCode();
+      setConnectionStatus("Opening room", false);
+      $("createBtn").disabled = true;
+
+      const peer = new Peer(peerIdForRoom(state.roomCode), { debug: 1 });
+      state.peer = peer;
+
+      peer.on("open", () => {
+        $("createBtn").disabled = false;
+        resetGameState(1);
+        showScreen("placement");
+        updateRoomDisplays();
+        setConnectionStatus("Waiting", false);
+        toast(`Room ${state.roomCode} is open. Share the code with your opponent.`);
+      });
+
+      peer.on("connection", (connection) => {
+        if (state.conn && state.conn.open) {
+          connection.on("open", () => {
+            connection.send({ type: "room_full" });
+            setTimeout(() => connection.close(), 250);
+          });
+          return;
+        }
+        if (state.phase === "battle" || state.phase === "end") {
+          connection.on("open", () => {
+            connection.send({ type: "match_in_progress" });
+            setTimeout(() => connection.close(), 250);
+          });
+          return;
+        }
+        setupConnection(connection);
+      });
+
+      peer.on("error", (error) => {
+        $("createBtn").disabled = false;
+        handlePeerError(error, "create");
+      });
+    }
+
+    function joinRoom() {
+      if (!ensurePeerAvailable()) return;
+      saveName();
+      const code = normalizeRoomCode($("roomInput").value);
+      $("roomInput").value = code;
+      if (code.length !== 6) {
+        toast("Enter the full six-character room code.", "error");
+        return;
+      }
+
+      destroyPeer();
+      state.isHost = false;
+      state.roomCode = code;
+      setConnectionStatus("Connecting", false);
+      $("joinBtn").disabled = true;
+
+      const peer = new Peer(undefined, { debug: 1 });
+      state.peer = peer;
+
+      peer.on("open", () => {
+        const connection = peer.connect(peerIdForRoom(code), { reliable: true, serialization: "json" });
+        setupConnection(connection);
+      });
+
+      peer.on("error", (error) => {
+        $("joinBtn").disabled = false;
+        handlePeerError(error, "join");
+      });
+    }
+
+    function handlePeerError(error, action) {
+      console.error(error);
+      const type = error && error.type;
+      if (type === "unavailable-id" && action === "create") {
+        toast("That room code was already in use. Creating a new one…");
+        setTimeout(createRoom, 250);
+        return;
+      }
+      if (type === "peer-unavailable") {
+        toast("Room not found. Confirm the code and make sure the host is still online.", "error");
+      } else if (type === "network" || type === "server-error" || type === "socket-error") {
+        toast("Could not reach the connection service. Check the network and try again.", "error");
+      } else {
+        toast(`Connection error${type ? `: ${type}` : ""}.`, "error");
+      }
+      setConnectionStatus("Offline", false);
+    }
+
+    function setupConnection(connection) {
+      state.conn = connection;
+
+      connection.on("open", () => {
+        state.connected = true;
+        $("joinBtn").disabled = false;
+        setConnectionStatus("Connected", true);
+        send({ type: "hello", version: PROTOCOL_VERSION, name: state.myName, gameNumber: state.gameNumber });
+        if (!state.isHost) {
+          resetGameState(1);
+          showScreen("placement");
+          updateRoomDisplays();
+        }
+        addChat("system", "Secure command channel established.");
+        renderAll();
+      });
+
+      connection.on("data", handleMessage);
+
+      connection.on("close", () => {
+        state.connected = false;
+        setConnectionStatus("Disconnected", false);
+        if (state.phase === "placement") {
+          state.opponentReady = false;
+          state.opponentCommitment = null;
+          state.opponentName = "Opponent";
+          toast("Your opponent disconnected. A new opponent can still join this room.", "error");
+        } else {
+          toast("Your opponent disconnected. This match cannot continue; leave the room to start again.", "error");
+        }
+        renderAll();
+      });
+
+      connection.on("error", (error) => {
+        console.error(error);
+        toast("The direct connection encountered an error.", "error");
+      });
+    }
+
+    function send(message) {
+      if (!state.conn || !state.conn.open) return false;
+      state.conn.send({ ...message, v: PROTOCOL_VERSION });
+      return true;
+    }
+
+    async function handleMessage(message) {
+      if (!message || typeof message !== "object") return;
+      if (message.type === "room_full") {
+        toast("That room already has two players.", "error");
+        destroyPeer();
+        showScreen("lobby");
+        return;
+      }
+      if (message.type === "match_in_progress") {
+        toast("That room already has a match in progress. Ask the host to create a new room.", "error");
+        destroyPeer();
+        showScreen("lobby");
+        return;
+      }
+      if (message.v && message.v !== PROTOCOL_VERSION) {
+        toast("The players are using incompatible game versions.", "error");
+        return;
+      }
+
+      switch (message.type) {
+        case "hello":
+          state.opponentName = safeName(message.name || "Opponent");
+          if (state.isHost) send({ type: "hello", version: PROTOCOL_VERSION, name: state.myName, gameNumber: state.gameNumber });
+          toast(`${state.opponentName} joined the room.`);
+          renderAll();
+          break;
+        case "ready":
+          if (Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
+          state.opponentReady = true;
+          state.opponentCommitment = String(message.commitment || "");
+          addChat("system", `${state.opponentName} is ready.`);
+          renderAll();
+          await maybeStartBattle();
+          break;
+        case "unready":
+          if (Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
+          state.opponentReady = false;
+          state.opponentCommitment = null;
+          addChat("system", `${state.opponentName} is adjusting their fleet.`);
+          renderAll();
+          break;
+        case "start_game":
+          if (state.phase !== "placement" || !state.myReady || !state.opponentReady) return;
+          startBattle(Boolean(message.hostStarts), Number(message.gameNumber) || state.gameNumber);
+          break;
+        case "shot":
+          await receiveShot(message);
+          break;
+        case "shot_result":
+          await receiveShotResult(message);
+          break;
+        case "chat":
+          addChat("opponent", String(message.text || "").slice(0, 180));
+          playSound("message");
+          break;
+        case "rematch_request":
+          if (state.phase !== "end" || Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
+          state.opponentRematch = true;
+          toast(`${state.opponentName} requested a rematch.`);
+          renderEnd();
+          maybeResetForRematch();
+          break;
+        case "rematch_reset":
+          resetGameState(Number(message.gameNumber) || state.gameNumber + 1);
+          addChat("system", "Rematch accepted. Deploy a new fleet.");
+          showScreen("placement");
+          break;
+        case "reveal":
+          if (Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
+          await verifyOpponentReveal(message);
+          break;
+        default:
+          break;
+      }
+    }
+
+    function updateRoomDisplays() {
+      $("roomCodePlacement").textContent = state.roomCode || "------";
+      $("roomCodeBattle").textContent = state.roomCode || "------";
+      const invite = getInviteLink();
+      [$("shareBtnPlacement")].forEach((button) => button.dataset.invite = invite);
+    }
+
+    function getInviteLink() {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
+      url.searchParams.set("room", state.roomCode);
+      return url.toString();
+    }
+
+    async function copyText(text, successMessage) {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast(successMessage);
+      } catch (_) {
+        const area = document.createElement("textarea");
+        area.value = text;
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand("copy");
+        area.remove();
+        toast(successMessage);
+      }
+    }
+
+    async function shareInvite() {
+      const text = `Join my Naval Duel room: ${state.roomCode}`;
+      const url = getInviteLink();
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: "Naval Duel", text, url });
+          return;
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+        }
+      }
+      await copyText(`${text}\n${url}`, "Invite copied.");
+    }
+
+    function occupiedCells(excludingShipId = null) {
+      const occupied = new Set();
+      state.ships.forEach((ship) => {
+        if (ship.id !== excludingShipId) ship.cells.forEach(([x, y]) => occupied.add(keyOf(x, y)));
+      });
+      return occupied;
+    }
+
+    function proposedCells(ship, startX, startY, orientation = state.orientation) {
+      return Array.from({ length: ship.length }, (_, index) => [
+        startX + (orientation === "h" ? index : 0),
+        startY + (orientation === "v" ? index : 0)
+      ]);
+    }
+
+    function canPlace(ship, cells) {
+      const occupied = occupiedCells(ship.id);
+      return cells.every(([x, y]) => x >= 0 && y >= 0 && x < BOARD_SIZE && y < BOARD_SIZE && !occupied.has(keyOf(x, y)));
+    }
+
+    function placeSelectedShip(x, y) {
+      if (state.myReady) return;
+      const ship = state.ships.find((item) => item.id === state.selectedShipId);
+      if (!ship) return;
+      const cells = proposedCells(ship, x, y);
+      if (!canPlace(ship, cells)) {
+        playSound("error");
+        toast("That ship does not fit there.", "error");
+        return;
+      }
+      ship.cells = cells;
+      playSound("place");
+      selectNextUnplaced();
+      renderPlacement();
+    }
+
+    function selectNextUnplaced() {
+      const next = state.ships.find((ship) => ship.cells.length === 0);
+      state.selectedShipId = next ? next.id : null;
+    }
+
+    function selectShip(id) {
+      if (state.myReady) return;
+      const ship = state.ships.find((item) => item.id === id);
+      if (!ship) return;
+      if (ship.cells.length) ship.cells = [];
+      state.selectedShipId = id;
+      renderPlacement();
+    }
+
+    function clearFleet() {
+      if (state.myReady) return;
+      state.ships.forEach((ship) => { ship.cells = []; });
+      state.selectedShipId = SHIP_DEFS[0].id;
+      renderPlacement();
+    }
+
+    function randomizeFleet() {
+      if (state.myReady) return;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        state.ships = freshShips();
+        let success = true;
+        for (const ship of state.ships) {
+          let placed = false;
+          for (let tries = 0; tries < 300 && !placed; tries += 1) {
+            const orientation = Math.random() < .5 ? "h" : "v";
+            const x = Math.floor(Math.random() * BOARD_SIZE);
+            const y = Math.floor(Math.random() * BOARD_SIZE);
+            const cells = proposedCells(ship, x, y, orientation);
+            if (canPlace(ship, cells)) {
+              ship.cells = cells;
+              placed = true;
+            }
+          }
+          if (!placed) { success = false; break; }
+        }
+        if (success) {
+          state.selectedShipId = null;
+          playSound("place");
+          renderPlacement();
+          return;
+        }
+      }
+      toast("Could not create a random fleet. Try again.", "error");
+    }
+
+    function fleetComplete() {
+      return state.ships.every((ship) => ship.cells.length === ship.length);
+    }
+
+    function canonicalPlacement(ships = state.ships) {
+      return ships
+        .map((ship) => ({
+          id: ship.id,
+          cells: ship.cells.map(([x, y]) => [x, y]).sort((a, b) => a[1] - b[1] || a[0] - b[0])
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+    }
+
+    function sha256Fallback(value) {
+      const bytes = Array.from(new TextEncoder().encode(value));
+      const bitLength = bytes.length * 8;
+      bytes.push(0x80);
+      while (bytes.length % 64 !== 56) bytes.push(0);
+      const high = Math.floor(bitLength / 0x100000000);
+      const low = bitLength >>> 0;
+      for (let shift = 24; shift >= 0; shift -= 8) bytes.push((high >>> shift) & 0xff);
+      for (let shift = 24; shift >= 0; shift -= 8) bytes.push((low >>> shift) & 0xff);
+
+      const h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+      const k = [
+        0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+        0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+        0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+        0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+        0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+        0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+        0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+        0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+      ];
+      const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+      const w = new Array(64);
+
+      for (let offset = 0; offset < bytes.length; offset += 64) {
+        for (let i = 0; i < 16; i += 1) {
+          const j = offset + i * 4;
+          w[i] = ((bytes[j] << 24) | (bytes[j + 1] << 16) | (bytes[j + 2] << 8) | bytes[j + 3]) >>> 0;
+        }
+        for (let i = 16; i < 64; i += 1) {
+          const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+          const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+          w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+        }
+        let [a, b, c, d, e, f, g, hh] = h;
+        for (let i = 0; i < 64; i += 1) {
+          const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+          const ch = (e & f) ^ (~e & g);
+          const t1 = (hh + s1 + ch + k[i] + w[i]) >>> 0;
+          const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+          const maj = (a & b) ^ (a & c) ^ (b & c);
+          const t2 = (s0 + maj) >>> 0;
+          hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+        }
+        h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0; h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
+        h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0; h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+      }
+      return h.map((word) => word.toString(16).padStart(8, "0")).join("");
+    }
+
+    async function sha256(value) {
+      if (globalThis.crypto && globalThis.crypto.subtle) {
+        try {
+          const data = new TextEncoder().encode(value);
+          const digest = await globalThis.crypto.subtle.digest("SHA-256", data);
+          return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+        } catch (_) {}
+      }
+      return sha256Fallback(value);
+    }
+
+    async function computeCommitment(ships, nonce) {
+      return sha256(JSON.stringify({ ships: canonicalPlacement(ships), nonce }));
+    }
+
+    async function toggleReady() {
+      if (!state.connected) {
+        toast("Wait for an opponent to connect.", "error");
+        return;
+      }
+      if (state.myReady) {
+        state.myReady = false;
+        state.commitment = null;
+        state.placementNonce = null;
+        send({ type: "unready", gameNumber: state.gameNumber });
+        renderPlacement();
+        return;
+      }
+      if (!fleetComplete()) {
+        toast("Place all five ships first.", "error");
+        return;
+      }
+      state.placementNonce = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+      state.commitment = await computeCommitment(state.ships, state.placementNonce);
+      state.myReady = true;
+      send({ type: "ready", commitment: state.commitment, gameNumber: state.gameNumber });
+      addChat("system", "Your fleet is locked and ready.");
+      renderPlacement();
+      await maybeStartBattle();
+    }
+
+    async function maybeStartBattle() {
+      if (!state.isHost || !state.myReady || !state.opponentReady || state.phase !== "placement") return;
+      const digest = await sha256(`starter:${state.roomCode}:${state.gameNumber}`);
+      const hostStarts = parseInt(digest.slice(0, 2), 16) % 2 === 0;
+      send({ type: "start_game", hostStarts, gameNumber: state.gameNumber });
+      startBattle(hostStarts, state.gameNumber);
+    }
+
+    function startBattle(hostStarts, gameNumber) {
+      state.gameNumber = gameNumber;
+      state.myTurn = state.isHost ? hostStarts : !hostStarts;
+      state.myShots = new Map();
+      state.incomingShots = new Map();
+      state.pendingShot = null;
+      state.outcome = null;
+      showScreen("battle");
+      addChat("system", `${state.myTurn ? "You have" : state.opponentName + " has"} the first shot.`);
+      playSound("start");
+      renderBattle();
+    }
+
+    function fireAt(x, y) {
+      if (state.phase !== "battle" || !state.myTurn || state.pendingShot || !state.connected) return;
+      const key = keyOf(x, y);
+      if (state.myShots.has(key)) return;
+      state.pendingShot = { x, y };
+      send({ type: "shot", x, y, gameNumber: state.gameNumber });
+      addChat("system", `You fired at ${coordName(x, y)}.`);
+      renderBattle();
+    }
+
+    function validCoordinate(x, y) {
+      return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < BOARD_SIZE && y < BOARD_SIZE;
+    }
+
+    function shipAt(x, y) {
+      const key = keyOf(x, y);
+      return state.ships.find((ship) => ship.cells.some(([sx, sy]) => keyOf(sx, sy) === key)) || null;
+    }
+
+    function isMyShipSunk(ship) {
+      return ship.cells.every(([x, y]) => state.incomingShots.get(keyOf(x, y))?.result === "hit");
+    }
+
+    async function receiveShot(message) {
+      const x = Number(message.x);
+      const y = Number(message.y);
+      if (Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
+      if (state.phase !== "battle" || !validCoordinate(x, y) || state.myTurn) return;
+      const key = keyOf(x, y);
+      if (state.incomingShots.has(key)) {
+        const previous = state.incomingShots.get(key);
+        send({ type: "shot_result", x, y, result: previous.result, sunk: previous.sunk || null, gameOver: Boolean(previous.gameOver), duplicate: true, gameNumber: state.gameNumber });
+        return;
+      }
+
+      const ship = shipAt(x, y);
+      const result = ship ? "hit" : "miss";
+      state.incomingShots.set(key, { result, shipId: ship ? ship.id : null, sunk: null, gameOver: false });
+      const sunk = ship && isMyShipSunk(ship) ? ship.name : null;
+      const gameOver = state.ships.every(isMyShipSunk);
+      state.incomingShots.set(key, { result, shipId: ship ? ship.id : null, sunk, gameOver });
+
+      send({ type: "shot_result", x, y, result, sunk, gameOver, gameNumber: state.gameNumber });
+      addChat("system", `${state.opponentName} fired at ${coordName(x, y)} — ${result}${sunk ? `, sinking your ${sunk}` : ""}.`);
+      playSound(result);
+
+      if (gameOver) {
+        state.outcome = "loss";
+        state.myTurn = false;
+        showEndScreen();
+        await sendReveal();
+      } else {
+        state.myTurn = true;
+        renderBattle();
+      }
+    }
+
+    async function receiveShotResult(message) {
+      const x = Number(message.x);
+      const y = Number(message.y);
+      if (Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
+      if (state.phase !== "battle" || !state.pendingShot || state.pendingShot.x !== x || state.pendingShot.y !== y) return;
+      if (message.result !== "hit" && message.result !== "miss") return;
+
+      state.myShots.set(keyOf(x, y), { result: message.result, sunk: message.sunk || null });
+      state.pendingShot = null;
+      playSound(message.result);
+
+      if (message.sunk) toast(`Enemy ${message.sunk} sunk!`);
+
+      if (message.gameOver) {
+        state.outcome = "win";
+        state.myTurn = false;
+        showEndScreen();
+        await sendReveal();
+      } else {
+        state.myTurn = false;
+        renderBattle();
+      }
+    }
+
+    function serializeShips() {
+      return state.ships.map((ship) => ({ id: ship.id, cells: ship.cells.map(([x, y]) => [x, y]) }));
+    }
+
+    async function sendReveal() {
+      if (state.revealSent || !state.placementNonce) return;
+      state.revealSent = true;
+      send({ type: "reveal", ships: serializeShips(), nonce: state.placementNonce, gameNumber: state.gameNumber });
+    }
+
+    function validateRevealedFleet(ships) {
+      if (!Array.isArray(ships) || ships.length !== SHIP_DEFS.length) return false;
+      const occupied = new Set();
+      for (const def of SHIP_DEFS) {
+        const ship = ships.find((item) => item && item.id === def.id);
+        if (!ship || !Array.isArray(ship.cells) || ship.cells.length !== def.length) return false;
+        const cells = ship.cells.map((cell) => Array.isArray(cell) ? [Number(cell[0]), Number(cell[1])] : [NaN, NaN]);
+        if (!cells.every(([x, y]) => validCoordinate(x, y))) return false;
+        const xs = new Set(cells.map(([x]) => x));
+        const ys = new Set(cells.map(([, y]) => y));
+        if (xs.size !== 1 && ys.size !== 1) return false;
+        const sorted = cells.slice().sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+        for (let i = 1; i < sorted.length; i += 1) {
+          const dx = Math.abs(sorted[i][0] - sorted[i - 1][0]);
+          const dy = Math.abs(sorted[i][1] - sorted[i - 1][1]);
+          if (dx + dy !== 1) return false;
+        }
+        for (const [x, y] of cells) {
+          const key = keyOf(x, y);
+          if (occupied.has(key)) return false;
+          occupied.add(key);
+        }
+      }
+      return true;
+    }
+
+    function verifyShotHistoryAgainstFleet(ships) {
+      const occupied = new Set(ships.flatMap((ship) => ship.cells.map(([x, y]) => keyOf(Number(x), Number(y)))));
+      for (const [key, shot] of state.myShots.entries()) {
+        const expected = occupied.has(key) ? "hit" : "miss";
+        if (shot.result !== expected) return false;
+      }
+      return true;
+    }
+
+    async function verifyOpponentReveal(message) {
+      try {
+        const validFleet = validateRevealedFleet(message.ships);
+        const computed = await computeCommitment(message.ships, String(message.nonce || ""));
+        const historyValid = validFleet && verifyShotHistoryAgainstFleet(message.ships);
+        state.opponentVerified = Boolean(validFleet && historyValid && computed === state.opponentCommitment);
+      } catch (error) {
+        console.error(error);
+        state.opponentVerified = false;
+      }
+      renderEnd();
+    }
+
+    function showEndScreen() {
+      showScreen("end");
+      renderEnd();
+      playSound(state.outcome === "win" ? "victory" : "loss");
+    }
+
+    function requestRematch() {
+      if (!state.connected) {
+        toast("Your opponent is disconnected.", "error");
+        return;
+      }
+      state.myRematch = true;
+      send({ type: "rematch_request", gameNumber: state.gameNumber });
+      renderEnd();
+      maybeResetForRematch();
+    }
+
+    function maybeResetForRematch() {
+      if (!state.isHost || !state.myRematch || !state.opponentRematch) return;
+      const nextGame = state.gameNumber + 1;
+      send({ type: "rematch_reset", gameNumber: nextGame });
+      resetGameState(nextGame);
+      addChat("system", "Rematch accepted. Deploy a new fleet.");
+      showScreen("placement");
+    }
+
+    function addChat(sender, text) {
+      const cleaned = String(text || "").trim().slice(0, 180);
+      if (!cleaned) return;
+      state.chat.push({ sender, text: cleaned });
+      if (state.chat.length > 60) state.chat.shift();
+      renderChat();
+    }
+
+    function sendChat() {
+      const text = $("chatInput").value.trim().slice(0, 180);
+      if (!text || !state.connected) return;
+      send({ type: "chat", text });
+      addChat("me", text);
+      $("chatInput").value = "";
+    }
+
+    function createBoard(container, mode) {
+      container.innerHTML = "";
+      const frame = document.createElement("div");
+      frame.className = "board-frame";
+      frame.setAttribute("role", "grid");
+
+      const corner = document.createElement("div");
+      corner.className = "axis-label";
+      frame.appendChild(corner);
+
+      for (let x = 0; x < BOARD_SIZE; x += 1) {
+        const label = document.createElement("div");
+        label.className = "axis-label";
+        label.textContent = String.fromCharCode(65 + x);
+        frame.appendChild(label);
+      }
+
+      for (let y = 0; y < BOARD_SIZE; y += 1) {
+        const rowLabel = document.createElement("div");
+        rowLabel.className = "axis-label";
+        rowLabel.textContent = String(y + 1);
+        frame.appendChild(rowLabel);
+
+        for (let x = 0; x < BOARD_SIZE; x += 1) {
+          const cell = document.createElement("button");
+          cell.type = "button";
+          cell.className = "cell";
+          cell.dataset.x = String(x);
+          cell.dataset.y = String(y);
+          cell.setAttribute("role", "gridcell");
+          cell.setAttribute("aria-label", coordName(x, y));
+
+          const key = keyOf(x, y);
+          if (mode === "placement") {
+            const ship = shipAt(x, y);
+            if (ship) cell.classList.add("ship");
+            cell.disabled = state.myReady;
+            cell.addEventListener("click", () => placeSelectedShip(x, y));
+            cell.addEventListener("mouseenter", () => showPlacementPreview(frame, x, y));
+            cell.addEventListener("mouseleave", () => clearPlacementPreview(frame));
+          } else if (mode === "enemy") {
+            const shot = state.myShots.get(key);
+            if (shot) cell.classList.add(shot.result);
+            if (shot?.sunk) cell.classList.add("sunk");
+            if (state.pendingShot && state.pendingShot.x === x && state.pendingShot.y === y) cell.classList.add("pending");
+            const targetable = state.myTurn && !state.pendingShot && !shot && state.connected;
+            cell.disabled = !targetable;
+            if (targetable) cell.classList.add("targetable");
+            cell.addEventListener("click", () => fireAt(x, y));
+          } else if (mode === "own") {
+            const ship = shipAt(x, y);
+            const shot = state.incomingShots.get(key);
+            if (ship) cell.classList.add("ship");
+            if (shot) cell.classList.add(shot.result);
+            if (ship && isMyShipSunk(ship)) cell.classList.add("sunk");
+            cell.disabled = true;
+          }
+          frame.appendChild(cell);
+        }
+      }
+      container.appendChild(frame);
+    }
+
+    function showPlacementPreview(frame, x, y) {
+      clearPlacementPreview(frame);
+      if (state.myReady || !state.selectedShipId) return;
+      const ship = state.ships.find((item) => item.id === state.selectedShipId);
+      if (!ship) return;
+      const cells = proposedCells(ship, x, y);
+      const valid = canPlace(ship, cells);
+      cells.forEach(([cx, cy]) => {
+        const node = frame.querySelector(`.cell[data-x="${cx}"][data-y="${cy}"]`);
+        if (node) node.classList.add(valid ? "preview-ok" : "preview-bad");
+      });
+    }
+
+    function clearPlacementPreview(frame) {
+      frame.querySelectorAll(".preview-ok, .preview-bad").forEach((node) => node.classList.remove("preview-ok", "preview-bad"));
+    }
+
+    function renderShipList() {
+      const list = $("shipList");
+      list.innerHTML = "";
+      state.ships.forEach((ship) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `ship-card ${ship.id === state.selectedShipId ? "selected" : ""} ${ship.cells.length ? "placed" : ""}`;
+        button.disabled = state.myReady;
+        button.addEventListener("click", () => selectShip(ship.id));
+
+        const label = document.createElement("div");
+        label.innerHTML = `<div class="ship-name"></div><div class="ship-length"></div>`;
+        label.querySelector(".ship-name").textContent = ship.name;
+        label.querySelector(".ship-length").textContent = `${ship.length} cells${ship.cells.length ? " · placed" : ""}`;
+
+        const blocks = document.createElement("div");
+        blocks.className = "ship-blocks";
+        for (let i = 0; i < ship.length; i += 1) blocks.appendChild(document.createElement("i"));
+        button.append(label, blocks);
+        list.appendChild(button);
+      });
+    }
+
+    function renderPlacement() {
+      createBoard($("placementBoard"), "placement");
+      renderShipList();
+      updateRoomDisplays();
+      $("opponentNamePlacement").textContent = state.opponentName;
+      $("opponentAvatarPlacement").textContent = initials(state.opponentName);
+      $("rotateBtn").textContent = state.orientation === "h" ? "Rotate ↻ (Horizontal)" : "Rotate ↻ (Vertical)";
+      $("rotateBtn").disabled = state.myReady;
+      $("randomBtn").disabled = state.myReady;
+      $("clearBtn").disabled = state.myReady;
+
+      const readyButton = $("readyBtn");
+      readyButton.disabled = !state.connected || (!fleetComplete() && !state.myReady);
+      readyButton.textContent = state.myReady ? "Cancel ready" : "Ready for battle";
+      readyButton.className = state.myReady ? "ghost-btn" : "primary-btn";
+
+      if (!state.connected) {
+        $("placementStatusTitle").textContent = state.isHost ? "Waiting for an opponent" : "Connecting to room";
+        $("placementStatusDetail").textContent = state.isHost ? `Share room code ${state.roomCode}. You can arrange your fleet while you wait.` : "Establishing a direct browser connection…";
+      } else if (state.myReady && state.opponentReady) {
+        $("placementStatusTitle").textContent = "Launching battle";
+        $("placementStatusDetail").textContent = "Both fleets are locked. Determining the first turn…";
+      } else if (state.myReady) {
+        $("placementStatusTitle").textContent = "Fleet locked";
+        $("placementStatusDetail").textContent = `Waiting for ${state.opponentName} to finish deployment.`;
+      } else if (state.opponentReady) {
+        $("placementStatusTitle").textContent = `${state.opponentName} is ready`;
+        $("placementStatusDetail").textContent = "Complete your fleet and lock in your positions.";
+      } else {
+        $("placementStatusTitle").textContent = "Deploy your fleet";
+        $("placementStatusDetail").textContent = fleetComplete() ? "All ships placed. Lock your fleet when ready." : "Choose a ship, set its direction, then tap a starting square.";
+      }
+    }
+
+    function renderFleetStatus() {
+      const container = $("fleetStatus");
+      container.innerHTML = "";
+      state.ships.forEach((ship) => {
+        const sunk = isMyShipSunk(ship);
+        const row = document.createElement("div");
+        row.className = `fleet-row ${sunk ? "sunk" : ""}`;
+        const name = document.createElement("span");
+        name.textContent = ship.name;
+        const status = document.createElement("span");
+        status.textContent = sunk ? "SUNK" : "ACTIVE";
+        row.append(name, status);
+        container.appendChild(row);
+      });
+    }
+
+    function renderBattle() {
+      createBoard($("enemyBoard"), "enemy");
+      createBoard($("ownBattleBoard"), "own");
+      renderFleetStatus();
+      renderChat();
+      updateRoomDisplays();
+      $("opponentNameBattle").textContent = state.opponentName;
+      $("opponentAvatarBattle").textContent = initials(state.opponentName);
+      $("enemyBoardPanel").classList.toggle("enemy-turn", state.myTurn);
+
+      if (!state.connected) {
+        $("battleStatusTitle").textContent = "Connection interrupted";
+        $("battleStatusDetail").textContent = "Do not refresh. Waiting for the opponent to reconnect.";
+        $("turnValue").textContent = "Paused";
+      } else if (state.pendingShot) {
+        $("battleStatusTitle").textContent = `Firing at ${coordName(state.pendingShot.x, state.pendingShot.y)}`;
+        $("battleStatusDetail").textContent = "Waiting for the enemy waters to report the result.";
+        $("turnValue").textContent = "Shot away";
+      } else if (state.myTurn) {
+        $("battleStatusTitle").textContent = "Your turn";
+        $("battleStatusDetail").textContent = "Select an untested coordinate on the enemy grid.";
+        $("turnValue").textContent = "Choose target";
+      } else {
+        $("battleStatusTitle").textContent = `${state.opponentName}'s turn`;
+        $("battleStatusDetail").textContent = "Brace for incoming fire.";
+        $("turnValue").textContent = "Hold position";
+      }
+    }
+
+    function renderChat() {
+      const log = $("chatLog");
+      log.innerHTML = "";
+      state.chat.forEach((entry) => {
+        const node = document.createElement("div");
+        node.className = `chat-message ${entry.sender === "me" ? "mine" : entry.sender === "system" ? "system" : ""}`;
+        node.textContent = entry.text;
+        log.appendChild(node);
+      });
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function renderEnd() {
+      const win = state.outcome === "win";
+      $("resultIcon").textContent = win ? "🏆" : "🌊";
+      $("resultTitle").textContent = win ? "Victory" : "Fleet Lost";
+      $("resultMessage").textContent = win
+        ? `You sank every ship commanded by ${state.opponentName}.`
+        : `${state.opponentName} found and sank your entire fleet.`;
+
+      const badge = $("verificationBadge");
+      badge.className = "verification";
+      if (state.opponentVerified === true) {
+        badge.textContent = "✓ Opponent board verified";
+        badge.classList.add("good");
+      } else if (state.opponentVerified === false) {
+        badge.textContent = "⚠ Board verification failed";
+        badge.classList.add("bad");
+      } else {
+        badge.textContent = "⏳ Waiting for board verification…";
+      }
+
+      const button = $("rematchBtn");
+      if (state.myRematch && state.opponentRematch) button.textContent = "Starting rematch…";
+      else if (state.myRematch) button.textContent = `Waiting for ${state.opponentName}…`;
+      else if (state.opponentRematch) button.textContent = "Accept rematch";
+      else button.textContent = "Request rematch";
+      button.disabled = state.myRematch || !state.connected;
+    }
+
+    function renderAll() {
+      if (state.phase === "placement") renderPlacement();
+      if (state.phase === "battle") renderBattle();
+      if (state.phase === "end") renderEnd();
+    }
+
+    let audioContext = null;
+    function playTone(frequency, duration = .1, type = "sine", volume = .035, delay = 0) {
+      if (!state.sound) return;
+      try {
+        audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = type;
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0, audioContext.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(volume, audioContext.currentTime + delay + .01);
+        gain.gain.exponentialRampToValueAtTime(.0001, audioContext.currentTime + delay + duration);
+        oscillator.connect(gain).connect(audioContext.destination);
+        oscillator.start(audioContext.currentTime + delay);
+        oscillator.stop(audioContext.currentTime + delay + duration + .02);
+      } catch (_) {}
+    }
+
+    function playSound(name) {
+      if (!state.sound) return;
+      if (name === "hit") { playTone(115, .24, "sawtooth", .05); playTone(72, .32, "square", .025, .03); }
+      else if (name === "miss") { playTone(530, .08, "sine", .03); playTone(410, .12, "sine", .02, .06); }
+      else if (name === "place") { playTone(260, .07, "triangle", .03); }
+      else if (name === "start") { [260, 390, 520].forEach((f, i) => playTone(f, .14, "triangle", .03, i * .09)); }
+      else if (name === "victory") { [330, 440, 554, 660].forEach((f, i) => playTone(f, .28, "triangle", .035, i * .11)); }
+      else if (name === "loss") { [260, 210, 160].forEach((f, i) => playTone(f, .26, "sine", .035, i * .13)); }
+      else if (name === "message") { playTone(650, .06, "sine", .02); }
+      else if (name === "error") { playTone(150, .1, "square", .025); }
+    }
+
+    function leaveRoom() {
+      destroyPeer();
+      state.roomCode = "";
+      state.opponentName = "Opponent";
+      state.chat = [];
+      state.phase = "lobby";
+      history.replaceState({}, "", window.location.pathname);
+      showScreen("lobby");
+    }
+
+    function bindEvents() {
+      $("createBtn").addEventListener("click", createRoom);
+      $("joinBtn").addEventListener("click", joinRoom);
+      $("roomInput").addEventListener("input", (event) => { event.target.value = normalizeRoomCode(event.target.value); });
+      $("roomInput").addEventListener("keydown", (event) => { if (event.key === "Enter") joinRoom(); });
+      $("nameInput").addEventListener("keydown", (event) => { if (event.key === "Enter") createRoom(); });
+      $("shareBtnPlacement").addEventListener("click", shareInvite);
+      $("copyCodeBtn").addEventListener("click", () => copyText(state.roomCode, "Room code copied."));
+      $("rotateBtn").addEventListener("click", () => { state.orientation = state.orientation === "h" ? "v" : "h"; playSound("place"); renderPlacement(); });
+      $("randomBtn").addEventListener("click", randomizeFleet);
+      $("clearBtn").addEventListener("click", clearFleet);
+      $("readyBtn").addEventListener("click", toggleReady);
+      $("chatSendBtn").addEventListener("click", sendChat);
+      $("chatInput").addEventListener("keydown", (event) => { if (event.key === "Enter") sendChat(); });
+      $("rematchBtn").addEventListener("click", requestRematch);
+      $("newRoomBtn").addEventListener("click", leaveRoom);
+      $("soundBtn").addEventListener("click", () => {
+        state.sound = !state.sound;
+        localStorage.setItem("naval-duel-sound", String(state.sound));
+        $("soundBtn").textContent = state.sound ? "🔊" : "🔇";
+        $("soundBtn").setAttribute("aria-label", state.sound ? "Mute sound" : "Enable sound");
+        if (state.sound) playSound("place");
+      });
+      $("helpBtn").addEventListener("click", () => $("helpModal").classList.add("open"));
+      $("closeHelpBtn").addEventListener("click", () => $("helpModal").classList.remove("open"));
+      $("helpModal").addEventListener("click", (event) => { if (event.target === $("helpModal")) $("helpModal").classList.remove("open"); });
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("helpModal").classList.remove("open"); });
+      window.addEventListener("beforeunload", destroyPeer);
+    }
+
+    function initialize() {
+      state.ships = freshShips();
+      const savedName = localStorage.getItem("naval-duel-name");
+      state.myName = safeName(savedName || "Commander");
+      $("nameInput").value = savedName || "";
+      state.sound = localStorage.getItem("naval-duel-sound") !== "false";
+      $("soundBtn").textContent = state.sound ? "🔊" : "🔇";
+
+      const room = normalizeRoomCode(new URLSearchParams(window.location.search).get("room"));
+      if (room) $("roomInput").value = room;
+      bindEvents();
+      renderAll();
+    }
+
+    initialize();
+  </script>
+</body>
+</html>
