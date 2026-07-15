@@ -601,7 +601,7 @@
 
     .restart-banner {
       position: fixed;
-      z-index: 95;
+      z-index: 80;
       top: 16px;
       left: 50%;
       transform: translateX(-50%);
@@ -860,10 +860,10 @@
 
   <div id="toastStack" class="toast-stack" aria-live="polite"></div>
 
-  <div id="restartBanner" class="restart-banner hidden" role="status">
-    <span id="restartBannerText"></span>
-    <button id="restartBannerAcceptBtn" class="primary-btn" type="button">Accept</button>
-    <button id="restartBannerDismissBtn" class="ghost-btn" type="button">Dismiss</button>
+  <div id="restartBanner" class="restart-banner hidden" role="region" aria-label="Restart request">
+    <span id="restartBannerText" aria-live="polite"></span>
+    <button id="restartBannerAcceptBtn" class="primary-btn" type="button" aria-label="Accept new game request">Accept</button>
+    <button id="restartBannerDismissBtn" class="ghost-btn" type="button" aria-label="Dismiss new game request">Dismiss</button>
   </div>
 
   <div id="helpModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
