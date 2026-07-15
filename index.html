@@ -613,7 +613,7 @@
     .modal { width: min(520px, 100%); padding: 24px; }
     .modal h2 { margin-bottom: 10px; }
     .modal p, .modal li { color: var(--muted); line-height: 1.55; font-size: 14px; }
-    .modal-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
     .hidden { display: none !important; }
 
@@ -726,6 +726,7 @@
               <div id="roomCodePlacement" class="room-code">------</div>
             </div>
             <button id="shareBtnPlacement" class="icon-btn" type="button" title="Share invite">↗</button>
+            <button id="menuBtnPlacement" class="icon-btn" type="button" aria-label="Game menu" title="Game menu">☰</button>
           </div>
           <div class="status-center">
             <div id="placementStatusTitle" class="status-title">Deploy your fleet</div>
@@ -771,6 +772,7 @@
               <div class="turn-label">Room</div>
               <div id="roomCodeBattle" class="room-code">------</div>
             </div>
+            <button id="menuBtnBattle" class="icon-btn" type="button" aria-label="Game menu" title="Game menu">☰</button>
           </div>
           <div class="status-center">
             <div id="battleStatusTitle" class="status-title">Battle stations</div>
@@ -852,6 +854,29 @@
     </div>
   </div>
 
+  <div id="gameMenuModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="gameMenuTitle">
+    <div class="panel modal">
+      <h2 id="gameMenuTitle">Game menu</h2>
+      <p>Manage the current match.</p>
+      <div class="lobby-actions">
+        <button id="menuRestartBtn" class="primary-btn" type="button">Start new game</button>
+        <button id="menuLeaveBtn" class="danger-btn" type="button">Leave room</button>
+        <button id="menuCancelBtn" class="ghost-btn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="confirmModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="panel modal">
+      <h2 id="confirmTitle">Are you sure?</h2>
+      <p id="confirmMessage"></p>
+      <div class="modal-actions">
+        <button id="confirmCancelBtn" class="ghost-btn" type="button">Cancel</button>
+        <button id="confirmOkBtn" class="danger-btn" type="button">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     "use strict";
 
@@ -899,8 +924,11 @@
       myRematch: false,
       opponentRematch: false,
       revealSent: false,
-      opponentVerified: null
+      opponentVerified: null,
+      suppressDisconnectToast: false
     };
+
+    let confirmAction = null;
 
     function freshShips() {
       return SHIP_DEFS.map((ship) => ({ ...ship, cells: [] }));
@@ -1111,6 +1139,10 @@
       connection.on("close", () => {
         state.connected = false;
         setConnectionStatus("Disconnected", false);
+        if (state.suppressDisconnectToast) {
+          state.suppressDisconnectToast = false;
+          return;
+        }
         if (state.phase === "placement") {
           state.opponentReady = false;
           state.opponentCommitment = null;
@@ -1190,10 +1222,13 @@
           playSound("message");
           break;
         case "rematch_request":
-          if (state.phase !== "end" || Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
+          if (!["placement", "battle", "end"].includes(state.phase) || Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
           state.opponentRematch = true;
-          toast(`${state.opponentName} requested a rematch.`);
-          renderEnd();
+          toast(state.phase === "end"
+            ? `${state.opponentName} requested a rematch.`
+            : `${state.opponentName} wants to start a new game. Open the menu to accept.`);
+          if (state.phase === "end") renderEnd();
+          updateGameMenuLabels();
           maybeResetForRematch();
           break;
         case "rematch_reset":
@@ -1204,6 +1239,11 @@
         case "reveal":
           if (Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
           await verifyOpponentReveal(message);
+          break;
+        case "peer_left":
+          state.suppressDisconnectToast = true;
+          toast(`${state.opponentName} left the room.`, "error");
+          leaveRoom();
           break;
         default:
           break;
@@ -1619,7 +1659,8 @@
       }
       state.myRematch = true;
       send({ type: "rematch_request", gameNumber: state.gameNumber });
-      renderEnd();
+      if (state.phase === "end") renderEnd();
+      updateGameMenuLabels();
       maybeResetForRematch();
     }
 
@@ -1916,6 +1957,45 @@
       showScreen("lobby");
     }
 
+    function leaveRoomWithNotice() {
+      send({ type: "peer_left" });
+      leaveRoom();
+    }
+
+    function openConfirm(message, action) {
+      $("confirmMessage").textContent = message;
+      confirmAction = action;
+      $("confirmModal").classList.add("open");
+    }
+
+    function closeConfirm() {
+      $("confirmModal").classList.remove("open");
+      confirmAction = null;
+    }
+
+    function updateGameMenuLabels() {
+      const button = $("menuRestartBtn");
+      if (!state.connected) {
+        button.textContent = "Start new game";
+        button.disabled = true;
+        return;
+      }
+      button.disabled = state.myRematch;
+      if (state.myRematch && state.opponentRematch) button.textContent = "Starting new game…";
+      else if (state.myRematch) button.textContent = `Waiting for ${state.opponentName}…`;
+      else if (state.opponentRematch) button.textContent = "Accept new game";
+      else button.textContent = "Start new game";
+    }
+
+    function openGameMenu() {
+      updateGameMenuLabels();
+      $("gameMenuModal").classList.add("open");
+    }
+
+    function closeGameMenu() {
+      $("gameMenuModal").classList.remove("open");
+    }
+
     function bindEvents() {
       $("createBtn").addEventListener("click", createRoom);
       $("joinBtn").addEventListener("click", joinRoom);
@@ -1931,7 +2011,31 @@
       $("chatSendBtn").addEventListener("click", sendChat);
       $("chatInput").addEventListener("keydown", (event) => { if (event.key === "Enter") sendChat(); });
       $("rematchBtn").addEventListener("click", requestRematch);
-      $("newRoomBtn").addEventListener("click", leaveRoom);
+      $("newRoomBtn").addEventListener("click", leaveRoomWithNotice);
+      $("menuBtnPlacement").addEventListener("click", openGameMenu);
+      $("menuBtnBattle").addEventListener("click", openGameMenu);
+      $("menuRestartBtn").addEventListener("click", () => {
+        closeGameMenu();
+        openConfirm(
+          state.opponentRematch
+            ? `Start a new game now? This will end the current match for both players.`
+            : `Ask ${state.opponentName} to start a new game? The current match will end for both players once you both agree.`,
+          requestRematch
+        );
+      });
+      $("menuLeaveBtn").addEventListener("click", () => {
+        closeGameMenu();
+        openConfirm("Leave the room? Your opponent will be disconnected and the match will end.", leaveRoomWithNotice);
+      });
+      $("menuCancelBtn").addEventListener("click", closeGameMenu);
+      $("gameMenuModal").addEventListener("click", (event) => { if (event.target === $("gameMenuModal")) closeGameMenu(); });
+      $("confirmCancelBtn").addEventListener("click", closeConfirm);
+      $("confirmOkBtn").addEventListener("click", () => {
+        const action = confirmAction;
+        closeConfirm();
+        if (action) action();
+      });
+      $("confirmModal").addEventListener("click", (event) => { if (event.target === $("confirmModal")) closeConfirm(); });
       $("soundBtn").addEventListener("click", () => {
         state.sound = !state.sound;
         localStorage.setItem("naval-duel-sound", String(state.sound));
@@ -1942,7 +2046,12 @@
       $("helpBtn").addEventListener("click", () => $("helpModal").classList.add("open"));
       $("closeHelpBtn").addEventListener("click", () => $("helpModal").classList.remove("open"));
       $("helpModal").addEventListener("click", (event) => { if (event.target === $("helpModal")) $("helpModal").classList.remove("open"); });
-      document.addEventListener("keydown", (event) => { if (event.key === "Escape") $("helpModal").classList.remove("open"); });
+      document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        $("helpModal").classList.remove("open");
+        closeGameMenu();
+        closeConfirm();
+      });
       window.addEventListener("beforeunload", destroyPeer);
     }
 
