@@ -599,6 +599,26 @@
     .toast.error { border-color: rgba(255,95,101,.35); color: #ffc4c7; }
     @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } }
 
+    .restart-banner {
+      position: fixed;
+      z-index: 95;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 14px;
+      background: rgba(6, 24, 38, .96);
+      border: 1px solid var(--line);
+      box-shadow: 0 14px 45px rgba(0,0,0,.35);
+      color: #d9e9f2;
+      font-size: 13px;
+      max-width: min(480px, calc(100vw - 32px));
+    }
+    .restart-banner .primary-btn, .restart-banner .ghost-btn { padding: 8px 14px; min-height: auto; white-space: nowrap; }
+
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -840,6 +860,12 @@
 
   <div id="toastStack" class="toast-stack" aria-live="polite"></div>
 
+  <div id="restartBanner" class="restart-banner hidden" role="status">
+    <span id="restartBannerText"></span>
+    <button id="restartBannerAcceptBtn" class="primary-btn" type="button">Accept</button>
+    <button id="restartBannerDismissBtn" class="ghost-btn" type="button">Dismiss</button>
+  </div>
+
   <div id="helpModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
     <div class="panel modal">
       <h2 id="helpTitle">How to play</h2>
@@ -925,7 +951,8 @@
       opponentRematch: false,
       revealSent: false,
       opponentVerified: null,
-      suppressDisconnectToast: false
+      suppressDisconnectToast: false,
+      restartBannerDismissed: false
     };
 
     let confirmAction = null;
@@ -954,6 +981,7 @@
       state.opponentRematch = false;
       state.revealSent = false;
       state.opponentVerified = null;
+      state.restartBannerDismissed = false;
       renderAll();
     }
 
@@ -962,6 +990,7 @@
         $(`${screen}Screen`).classList.toggle("active", screen === name);
       });
       state.phase = name;
+      updateRestartBanner();
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
@@ -1224,11 +1253,13 @@
         case "rematch_request":
           if (!["placement", "battle", "end"].includes(state.phase) || Number(message.gameNumber || state.gameNumber) !== state.gameNumber) return;
           state.opponentRematch = true;
+          state.restartBannerDismissed = false;
           toast(state.phase === "end"
             ? `${state.opponentName} requested a rematch.`
-            : `${state.opponentName} wants to start a new game. Open the menu to accept.`);
+            : `${state.opponentName} wants to start a new game.`);
           if (state.phase === "end") renderEnd();
           updateGameMenuLabels();
+          updateRestartBanner();
           maybeResetForRematch();
           break;
         case "rematch_reset":
@@ -1658,9 +1689,11 @@
         return;
       }
       state.myRematch = true;
+      state.restartBannerDismissed = false;
       send({ type: "rematch_request", gameNumber: state.gameNumber });
       if (state.phase === "end") renderEnd();
       updateGameMenuLabels();
+      updateRestartBanner();
       maybeResetForRematch();
     }
 
@@ -1796,6 +1829,7 @@
       createBoard($("placementBoard"), "placement");
       renderShipList();
       updateRoomDisplays();
+      updateRestartBanner();
       $("opponentNamePlacement").textContent = state.opponentName;
       $("opponentAvatarPlacement").textContent = initials(state.opponentName);
       $("rotateBtn").textContent = state.orientation === "h" ? "Rotate ↻ (Horizontal)" : "Rotate ↻ (Vertical)";
@@ -1848,6 +1882,7 @@
       renderFleetStatus();
       renderChat();
       updateRoomDisplays();
+      updateRestartBanner();
       $("opponentNameBattle").textContent = state.opponentName;
       $("opponentAvatarBattle").textContent = initials(state.opponentName);
       $("enemyBoardPanel").classList.toggle("enemy-turn", state.myTurn);
@@ -1973,6 +2008,26 @@
       confirmAction = null;
     }
 
+    function updateRestartBanner() {
+      const banner = $("restartBanner");
+      if (state.restartBannerDismissed || !state.connected || !["placement", "battle"].includes(state.phase)) {
+        banner.classList.add("hidden");
+        return;
+      }
+      const acceptBtn = $("restartBannerAcceptBtn");
+      if (state.opponentRematch && !state.myRematch) {
+        $("restartBannerText").textContent = `${state.opponentName} wants to start a new game.`;
+        acceptBtn.classList.remove("hidden");
+        banner.classList.remove("hidden");
+      } else if (state.myRematch) {
+        $("restartBannerText").textContent = `Waiting for ${state.opponentName} to accept your new game request…`;
+        acceptBtn.classList.add("hidden");
+        banner.classList.remove("hidden");
+      } else {
+        banner.classList.add("hidden");
+      }
+    }
+
     function updateGameMenuLabels() {
       const button = $("menuRestartBtn");
       if (!state.connected) {
@@ -2036,6 +2091,11 @@
         if (action) action();
       });
       $("confirmModal").addEventListener("click", (event) => { if (event.target === $("confirmModal")) closeConfirm(); });
+      $("restartBannerAcceptBtn").addEventListener("click", requestRematch);
+      $("restartBannerDismissBtn").addEventListener("click", () => {
+        state.restartBannerDismissed = true;
+        updateRestartBanner();
+      });
       $("soundBtn").addEventListener("click", () => {
         state.sound = !state.sound;
         localStorage.setItem("naval-duel-sound", String(state.sound));
